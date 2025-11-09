@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Shivankarr Infra</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+  <div id="root"></div>
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useEffect, useState } = React; 
+
+    const STORAGE_KEY = "shivankarr_data_v1";
+    const OWNER_PW_KEY = "shivankarr_owner_pw"; // base64 stored
+    const OWNER_AUTH_KEY = "shivankarr_owner_auth"; // "true" or "";
+
+    const defaultData = {
+      meta: {
+        company: "Shivankarr Infra",
+        tagline: "Building Trust, Strengthening Futures",
+        year: 2025,
+        phone: "+91 9053878717",
+        email: "shivankarrinfra@outlook.com", 
+        whatsapp: "+919053878717", 
+        location: "kurukshetra, haryana, India", 
+        logo: null,
+        formspreeId: "xkgkwjak", 
+        backgroundVideos: [],
+      },
+      services: [
+        { id: 1, title: "Structural Design & Analysis", desc: "Comprehensive structural engineering and calculation reports aligned with regional codes.", images: [] }, 
+        { id: 2, title: "CAD / BIM Drafting", desc: "Precise 2D/3D CAD, Revit (IFC) modelling and BIM coordination.", images: [] },
+        { id: 3, title: "Drawing Conversion & Documentation", desc: "Convert sketches/PDFs to construction-ready DWG/IFC with schedules.", images: [] },
+        { id: 4, title: "Construction Consultancy", desc: "Project planning, contractor liaison and constructability reviews.", images: [] },
+      ],
+      projects: [
+        { id: 1, name: "Residential Multi-storey", role: "Structural design & shop drawings", summary: "Full design package including modeling, analysis and reinforcement detailing.", images: [] }, 
+        { id: 2, name: "Commercial Office Fit-out", role: "BIM coordination & as-built drawings", summary: "Revit-based BIM deliverables and MEP coordination.", images: [] },
+        { id: 3, name: "Bridge Inspection Report", role: "Assessment & remedial recommendations", summary: "Site inspection, load rating and prioritized repair schedule.", images: [] },
+      ],
+    };
+    
+    // Helper function to handle file upload and convert to Data URL
+    const fileToDataURL = (file) => {
+        return new Promise((resolve, reject) => {
+            if (!file) return resolve(null); 
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    };
+
+
+    function usePersistentData() {
+      const [data, setData] = useState(() => {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          const parsed = raw ? JSON.parse(raw) : defaultData;
+          
+          // Ensure all meta fields exist (migration/initialization)
+          if (!parsed.meta.hasOwnProperty('whatsapp')) { parsed.meta.whatsapp = defaultData.meta.whatsapp; }
+          if (!parsed.meta.hasOwnProperty('location')) { parsed.meta.location = defaultData.meta.location; }
+          if (!parsed.meta.hasOwnProperty('formspreeId')) { parsed.meta.formspreeId = defaultData.meta.formspreeId; } 
+          if (!parsed.meta.hasOwnProperty('backgroundVideos')) { parsed.meta.backgroundVideos = defaultData.meta.backgroundVideos; } 
+
+          if (parsed.meta.email === "er.amardeepsingh.com") { parsed.meta.email = defaultData.meta.email; }
+
+          // NEW MIGRATION LOGIC: Convert old single 'image' to new 'images' array
+          parsed.services = parsed.services.map(s => {
+              const images = (s.image && typeof s.image === 'string') ? [s.image] : s.images || [];
+              delete s.image;
+              return { ...s, images };
+          });
+          parsed.projects = parsed.projects.map(p => {
+              const images = (p.image && typeof p.image === 'string') ? [p.image] : p.images || [];
+              delete p.image;
+              return { ...p, images };
+          });
+
+          return parsed;
+        } catch (e) {
+          console.error("Failed to parse local storage, using default.", e);
+          return defaultData;
+        }
+      });
+
+      useEffect(() => {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        } catch (e) {
+          console.error("Failed to save to storage", e);
+        }
+      }, [data]);
+
+      return [data, setData];
+    }
+    
+// --- START: ImageCarousel Component (Reused for Services/Projects) ---
+
+function ImageCarousel({ images, heightClass = 'h-36' }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  if (!images || images.length === 0) {
+    return <div className={`relative w-full ${heightClass} bg-gray-200 rounded mb-3 flex items-center justify-center text-slate-400 text-sm`}>No Images Uploaded</div>;
+  }
+
+  const next = () => setCurrentIndex((currentIndex + 1) % images.length);
+  const prev = () => setCurrentIndex((currentIndex - 1 + images.length) % images.length);
+
+  return (
+    <div className={`relative w-full ${heightClass} mb-3`}>
+      <img
+        src={images[currentIndex]}
+        alt={`Gallery image ${currentIndex + 1}`}
+        className="h-full w-full object-cover rounded transition-opacity duration-300"
+      />
+      {images.length > 1 && (
+        <>
+          <button onClick={prev} className="absolute left-0 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 text-xl hover:bg-black/70 rounded-r transition">
+            &lt;
+          </button>
+          <button onClick={next} className="absolute right-0 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 text-xl hover:bg-black/70 rounded-l transition">
+            &gt;
+          </button>
+          <div className="absolute bottom-0 w-full text-center text-white text-xs py-1 bg-black/50 rounded-b">
+            {currentIndex + 1} / {images.length}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// --- END: ImageCarousel Component ---
+
+// --- START: VideoBackground Component (FIXED for continuous play) ---
+function VideoBackground({ videos, isOwnerAuthenticated }) {
+    const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+    const videosCount = (videos || []).length;
+
+    if (videosCount === 0) {
+        if (isOwnerAuthenticated) {
+            return (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+                    <p className="text-white text-lg font-medium">Video Background: No videos uploaded. Use Edit Mode (Home tab) to add.</p>
+                </div>
+            );
+        }
+        return null; 
+    }
+
+    const handleVideoEnd = () => {
+        // Switch to the next video in the playlist
+        setCurrentVideoIndex((prevIndex) => (prevIndex + 1) % videosCount);
+    };
+    
+    // Get the URL of the current video
+    const currentVideoUrl = videos[currentVideoIndex];
+    
+    // Determine loop behavior: true only if there's just one video.
+    const isLoopingSingle = videosCount === 1;
+
+    return (
+        <div className="absolute inset-0 overflow-hidden z-0">
+            <video
+                key={currentVideoIndex} // <-- CRITICAL FIX: Forces the video element to reset/remount when index changes
+                src={currentVideoUrl}
+                onEnded={handleVideoEnd} // Switches to the next video
+                autoPlay
+                muted
+                loop={isLoopingSingle} // Loop only if one video
+                playsInline
+                preload="auto"
+                className="absolute inset-0 w-full h-full object-cover" 
+            />
+            <div className="absolute inset-0 bg-black/60 z-10"></div> {/* Dark overlay for readability */}
+        </div>
+    );
+}
+// --- END: VideoBackground Component ---
+
+
+function Header({ data, triggerOwnerLogin, goSection, currentSection, isOwnerAuthenticated }) {
+  const holdTimerRef = React.useRef(null);
+  const heldRef = React.useRef(false);
+
+  React.useEffect(() => {
+    return () => {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const startHold = () => {
+    heldRef.current = false;
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = setTimeout(() => {
+      heldRef.current = true;
+      try { triggerOwnerLogin && triggerOwnerLogin(); } catch(e) {}
+    }, 5000); // 5 seconds
+  };
+
+  const cancelHold = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    heldRef.current = false;
+  };
+
+  return (
+    <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
+      <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            onMouseDown={startHold}
+            onMouseUp={cancelHold}
+            onMouseLeave={cancelHold}
+            onTouchStart={startHold}
+            onTouchEnd={cancelHold}
+            style={{ cursor: 'pointer' }}
+          >
+            {data.meta.logo ? (
+              <img src={data.meta.logo} alt="logo" className="h-10 w-10 object-contain rounded" />
+            ) : (
+              <div className="h-10 w-10 rounded bg-indigo-700 flex items-center justify-center text-white font-semibold">SI</div>
+            )}
+          </div>
+
+          <div>
+            <div className="text-lg font-semibold text-slate-900">{data.meta.company}</div>
+            <div className="text-sm text-slate-500">{data.meta.tagline}</div>
+          </div>
+        </div>
+        <nav className="hidden md:flex items-center gap-6 text-sm">
+          <button onClick={()=>goSection('home')} className={"px-2" + (currentSection==='home' ? " font-semibold text-indigo-700" : " hover:text-indigo-700")}>Home</button>
+          <button onClick={()=>goSection('services')} className={"px-2" + (currentSection==='services' ? " font-semibold text-indigo-700" : " hover:text-indigo-700")}>Services</button>
+          <button onClick={()=>goSection('projects')} className={"px-2" + (currentSection==='projects' ? " font-semibold text-indigo-700" : " hover:text-indigo-700")}>Projects</button>
+          <button onClick={()=>goSection('contact')} className={"px-2" + (currentSection==='contact' ? " font-semibold text-indigo-700" : " hover:text-indigo-700")}>Contact</button>
+          {/* NEW: Edit Mode Button */}
+          {isOwnerAuthenticated && ( 
+                <button onClick={()=>goSection('owner')} className={"ml-4 px-3 py-1 border rounded text-xs " + (currentSection==='owner' ? " font-semibold border-indigo-700 bg-indigo-50 text-indigo-700" : " border-slate-300 text-slate-500 hover:text-indigo-700 hover:border-indigo-700")}>
+                    ⚙️ Edit Mode
+                </button>
+            )}
+        </nav>
+      </div>
+    </header>
+  );
+}
+
+
+// --- OwnerPanel Component ---
+function OwnerPanel({ data, onEditService, onDeleteService, onEditProject, onDeleteProject, onLogoUpload, onServiceImageAdd, onServiceImageRemove, onProjectImageAdd, onProjectImageRemove, onEditMeta, onLogout, onAddVideo, onRemoveVideo }) {
+    
+    const [activeTab, setActiveTab] = useState('general'); 
+
+    const tabs = [
+        { id: 'general', name: 'General' }, 
+        { id: 'home', name: 'Home' }, 
+        { id: 'services', name: 'Services' },
+        { id: 'projects', name: 'Projects' },
+        { id: 'contact', name: 'Contact' },
+    ];
+
+    return (
+        <div className="bg-white rounded-lg p-4 shadow-xl border border-indigo-100">
+            <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-lg">Website Settings</h4>
+                <button onClick={onLogout} className="text-xs px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition">Logout</button>
+            </div>
+
+            {/* Tab Navigation */}
+            <div className="flex border-b mb-4 overflow-x-auto whitespace-nowrap">
+                {tabs.map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`px-3 py-2 text-sm font-medium transition -mb-px ${
+                            activeTab === tab.id
+                                ? 'border-b-2 border-indigo-700 text-indigo-700'
+                                : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                    >
+                        {tab.name}
+                    </button>
+                ))}
+            </div>
+            
+            {/* Tab Content Container */}
+            <div className="space-y-4">
+
+                {/* --- GENERAL TAB CONTENT --- */}
+                {activeTab === 'general' && (
+                    <div className="space-y-4">
+                        {/* Contact Info */}
+                        <div>
+                            <div className="text-sm font-medium border-b pb-1 mb-2">Contact Info</div>
+                            <div className="grid gap-2">
+                                <input id="ownerPhone" value={data.meta.phone} onChange={(e)=>onEditMeta('phone', e.target.value)} className="p-2 border rounded" placeholder="Primary Phone"/>
+                                <input id="ownerEmail" value={data.meta.email} onChange={(e)=>onEditMeta('email', e.target.value)} className="p-2 border rounded" placeholder="Notification Email"/>
+                                <input id="ownerWhatsapp" value={data.meta.whatsapp} onChange={(e)=>onEditMeta('whatsapp', e.target.value)} className="p-2 border rounded" placeholder="WhatsApp Number (e.g. +919053878717)" />
+                                <input id="ownerLocation" value={data.meta.location} onChange={(e)=>onEditMeta('location', e.target.value)} className="p-2 border rounded" placeholder="Location (e.g. kurukshetra, haryana, India)" />
+                                <label className="flex items-center gap-2 text-sm">
+                                    <input id="ownerNotify" type="checkbox" checked={data.meta.notify ?? true} onChange={(e)=>onEditMeta('notify', e.target.checked)} />
+                                    <span>Enable auto-notify on new proposals (email & WhatsApp)</span>
+                                </label>
+                                <div className="text-xs text-slate-500">Edit the phone, email, WhatsApp, and location that will receive/be used for contact.</div>
+                            </div>
+                        </div>
+        
+                        {/* Logo */}
+                        <div>
+                            <div className="text-sm font-medium border-b pb-1 mb-2">Logo</div>
+                            <div className="flex items-center gap-3">
+                                {data.meta.logo ? (
+                                    <img src={data.meta.logo} alt="uploaded logo" className="h-16 w-16 object-contain" />
+                                ) : (
+                                    <div className="h-16 w-16 rounded bg-gray-100 flex items-center justify-center text-sm text-slate-500">No logo</div>
+                                )}
+                                <div>
+                                    <input type="file" accept="image/*" onChange={(e) => onLogoUpload(e.target.files && e.target.files[0])} />
+                                    <div className="text-xs text-slate-500 mt-1">PNG, JPG, SVG. Stored locally in browser.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                
+                {/* --- HOME TAB CONTENT --- */}
+                {activeTab === 'home' && (
+                    <div className="space-y-4">
+                        <div>
+                            <div className="text-sm font-medium border-b pb-1 mb-2">Home Page Content & Branding</div>
+                            <div className="grid gap-2">
+                                <input value={data.meta.company} onChange={(e)=>onEditMeta('company', e.target.value)} className="p-2 border rounded" placeholder="Company Name"/>
+                                <input value={data.meta.tagline} onChange={(e)=>onEditMeta('tagline', e.target.value)} className="p-2 border rounded" placeholder="Company Tagline"/>
+                                <input value={data.meta.year} type="number" onChange={(e)=>onEditMeta('year', parseInt(e.target.value))} className="p-2 border rounded" placeholder="Copyright Year"/>
+                                <div className="text-xs text-slate-500">
+                                    The **Company Name** and **Tagline** appear prominently on the Home section, header, and footer.
+                                </div>
+                            </div>
+                        </div>
+                        {/* Video Uploads */}
+                        <div>
+                            <div className="text-sm font-medium border-b pb-1 mb-2 flex items-center justify-between">
+                                <span>Background Videos (MP4/WEBM)</span>
+                                <label className="text-xs px-2 py-1 border rounded text-indigo-700 cursor-pointer hover:bg-indigo-50">
+                                    + Add Video
+                                    <input type="file" accept="video/mp4,video/webm" className="hidden" onChange={(e) => onAddVideo(e.target.files[0])} />
+                                </label>
+                            </div>
+                            <div className="mt-2 space-y-2">
+                                {(data.meta.backgroundVideos || []).map((videoUrl, index) => (
+                                    <div key={index} className="flex justify-between items-center bg-gray-50 p-2 rounded">
+                                        <span className="text-sm truncate">Video #{index + 1}</span>
+                                        <button onClick={() => onRemoveVideo(index)} className="text-xs px-2 py-1 border rounded text-red-600 hover:bg-red-50">Remove</button>
+                                    </div>
+                                ))}
+                                {(data.meta.backgroundVideos || []).length === 0 && (
+                                    <p className="text-xs text-slate-500">No background videos uploaded. Videos loop one after another automatically.</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- SERVICES TAB CONTENT --- */}
+                {activeTab === 'services' && (
+                    <div>
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="text-sm font-medium">Services List</div>
+                            <button className="text-xs px-2 py-1 border rounded text-indigo-700" onClick={() => onEditService({ id: null, title: "", desc: "", images: [] })}>+ Add Service</button>
+                        </div>
+                        <div className="space-y-2">
+                            {data.services.map(s => (
+                                <div key={s.id} className="flex flex-col gap-2 bg-gray-50 p-2 rounded">
+                                    <div className="flex justify-between items-start gap-3">
+                                        <div>
+                                            <div className="font-medium">{s.title}</div>
+                                            <div className="text-xs text-slate-600">{s.desc}</div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button className="text-xs px-2 py-1 border rounded" onClick={() => onEditService(s)}>Edit</button>
+                                            <button className="text-xs px-2 py-1 border rounded" onClick={() => onDeleteService(s.id)}>Delete</button>
+                                        </div>
+                                    </div>
+                                    {/* Image Controls for Service */}
+                                    <div className="text-xs">
+                                        <div className="flex flex-wrap gap-2 py-2 border-t border-gray-200 mt-2">
+                                            {s.images.map((img, index) => (
+                                                <div key={index} className="relative group">
+                                                    <img src={img} alt="Preview" className="h-10 w-10 object-cover rounded"/>
+                                                    <button 
+                                                        title="Remove Image"
+                                                        className="absolute inset-0 bg-red-600/70 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs rounded transition" 
+                                                        onClick={() => onServiceImageRemove(s.id, index)}>
+                                                        X
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <label className="text-indigo-700 cursor-pointer flex items-center text-sm font-medium border-dashed border-2 border-indigo-200 px-2 rounded hover:bg-indigo-50">
+                                                {s.images.length === 0 ? 'Upload Images' : 'Upload More'}
+                                                <input type="file" accept="image/*" className="hidden" onChange={(e) => onServiceImageAdd(s.id, e.target.files[0])} />
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- PROJECTS TAB CONTENT --- */}
+                {activeTab === 'projects' && (
+                    <div>
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="text-sm font-medium">Projects List</div>
+                            <button className="text-xs px-2 py-1 border rounded text-indigo-700" onClick={() => onEditProject({ id: null, name: "", role: "", summary: "", images: [] })}>+ Add Project</button>
+                        </div>
+                        <div className="space-y-2">
+                            {data.projects.map(p => (
+                                <div key={p.id} className="flex flex-col gap-2 bg-gray-50 p-2 rounded">
+                                    <div className="flex justify-between items-start gap-3">
+                                        <div>
+                                            <div className="font-medium">{p.name}</div>
+                                            <div className="text-xs text-slate-600">{p.role}</div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button className="text-xs px-2 py-1 border rounded" onClick={() => onEditProject(p)}>Edit</button>
+                                            <button className="text-xs px-2 py-1 border rounded" onClick={() => onDeleteProject(p.id)}>Delete</button>
+                                        </div>
+                                    </div>
+                                    {/* Image Controls for Project */}
+                                    <div className="text-xs">
+                                        <div className="flex flex-wrap gap-2 py-2 border-t border-gray-200 mt-2">
+                                            {p.images.map((img, index) => (
+                                                <div key={index} className="relative group">
+                                                    <img src={img} alt="Preview" className="h-10 w-10 object-cover rounded"/>
+                                                    <button 
+                                                        title="Remove Image"
+                                                        className="absolute inset-0 bg-red-600/70 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs rounded transition" 
+                                                        onClick={() => onProjectImageRemove(p.id, index)}>
+                                                        X
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <label className="text-indigo-700 cursor-pointer flex items-center text-sm font-medium border-dashed border-2 border-indigo-200 px-2 rounded hover:bg-indigo-50">
+                                                {p.images.length === 0 ? 'Upload Images' : 'Upload More'}
+                                                <input type="file" accept="image/*" className="hidden" onChange={(e) => onProjectImageAdd(p.id, e.target.files[0])} />
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                
+                {/* --- CONTACT TAB CONTENT --- */}
+                {activeTab === 'contact' && (
+                    <div className="space-y-4">
+                        <div>
+                            <div className="text-sm font-medium border-b pb-1 mb-2">Form Settings</div>
+                            <div className="grid gap-2">
+                                <input id="formspreeId" value={data.meta.formspreeId} onChange={(e)=>onEditMeta('formspreeId', e.target.value)} className="p-2 border rounded" placeholder="Formspree Form ID (e.g., xkgkwjak)"/>
+                                <div className="text-xs text-slate-500">
+                                    The **Formspree ID** is essential for connecting the contact form to your email. Get yours from [Formspree](https://formspree.io/).
+                                    <br/>
+                                    The form action is currently: `https://formspree.io/f/{data.meta.formspreeId}`.
+                                </div>
+                                <div className="text-sm text-slate-600 mt-3 border-t pt-2">
+                                    The description text above the form:
+                                </div>
+                                <p className="text-sm text-slate-600 p-2 border rounded bg-gray-50">
+                                    Please fill in your details below. The information will be sent to the owner's email **{data.meta.email}**, and your email will be set as the reply-to address. For secure file transfer, provide a link to Drive/Dropbox in the description.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+
+                <div className="pt-2 border-t text-xs text-slate-500">
+                    Changes are saved locally in this browser.
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// --- END: OwnerPanel Component ---
+
+function EditServiceModal({ model, onSave, onClose }) {
+  const [form, setForm] = useState({ title: model?.title || "", desc: model?.desc || "", images: model?.images || [] });
+  useEffect(() => setForm({ title: model?.title || "", desc: model?.desc || "", images: model?.images || [] }), [model]);
+  if (!model) return null;
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-4 w-96 shadow-lg">
+        <h4 className="font-semibold">{model.id ? "Edit Service" : "Add Service"}</h4>
+        <div className="mt-3 grid gap-2">
+          <input value={form.title} onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))} className="p-2 border rounded" placeholder="Title" />
+          <textarea value={form.desc} onChange={(e) => setForm(f => ({ ...f, desc: e.target.value }))} className="p-2 border rounded" rows={4} placeholder="Short description" />
+          <div className="flex justify-end gap-2 mt-2">
+            <button className="px-3 py-1 border rounded" onClick={onClose}>Cancel</button>
+            <button className="px-3 py-1 bg-indigo-700 text-white rounded" onClick={() => { onSave(form); onClose(); }}>Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditProjectModal({ model, onSave, onClose }) {
+  const [form, setForm] = useState({ name: model?.name || "", role: model?.role || "", summary: model?.summary || "", images: model?.images || [] });
+  useEffect(() => setForm({ name: model?.name || "", role: model?.role || "", summary: model?.summary || "", images: model?.images || [] }), [model]);
+  if (!model) return null;
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-4 w-96 shadow-lg">
+        <h4 className="font-semibold">{model.id ? "Edit Project" : "Add Project"}</h4>
+        <div className="mt-3 grid gap-2">
+          <input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} className="p-2 border rounded" placeholder="Project name" />
+          <input value={form.role} onChange={(e) => setForm(f => ({ ...f, role: e.target.value }))} className="p-2 border rounded" placeholder="Role (e.g. Structural design)" />
+          <textarea value={form.summary} onChange={(e) => setForm(f => ({ ...f, summary: e.target.value }))} className="p-2 border rounded" rows={4} placeholder="Short summary" />
+          <div className="flex justify-end gap-2 mt-2">
+            <button className="px-3 py-1 border rounded" onClick={onClose}>Cancel</button>
+            <button className="px-3 py-1 bg-indigo-700 text-white rounded" onClick={() => { onSave(form); onClose(); }}>Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShivankarrInfraApp() {
+  const [data, setData] = usePersistentData();
+  const [currentSection, setCurrentSection] = React.useState('home'); 
+  const [isOwnerAuthenticated, setIsOwnerAuthenticated] = React.useState(() => !!localStorage.getItem(OWNER_AUTH_KEY));
+  const [showLogin, setShowLogin] = React.useState(false);
+  const [serviceModal, setServiceModal] = React.useState(null);
+  const [projectModal, setProjectModal] = React.useState(null);
+
+  const nextId = (arr) => (arr.length ? Math.max(...arr.map((a) => a.id)) + 1 : 1);
+
+  function addService(s) { setData(d => ({ ...d, services: [...d.services, { id: nextId(d.services), ...s }] })); }
+  function updateService(id, s) { setData(d => ({ ...d, services: d.services.map(it => it.id === id ? { ...it, ...s } : it) })); }
+  function deleteService(id) { setData(d => ({ ...d, services: d.services.filter(it => it.id !== id) })); }
+
+  function addProject(p) { setData(d => ({ ...d.projects, projects: [...d.projects, { id: nextId(d.projects), ...p }] })); }
+  function updateProject(id, p) { setData(d => ({ ...d, projects: d.projects.map(it => it.id === id ? { ...it, ...p } : it) })); }
+  function deleteProject(id) { setData(d => ({ ...d, projects: d.projects.filter(it => it.id !== id) })); }
+
+  // Centralized image and video handling functions
+  function handleLogoUpload(file) {
+    fileToDataURL(file).then(dataUrl => {
+        setData(d => ({ ...d, meta: { ...d.meta, logo: dataUrl } }));
+    }).catch(console.error);
+  }
+
+  function addServiceImage(id, file) {
+      fileToDataURL(file).then(dataUrl => {
+          if (dataUrl) {
+              setData(d => ({
+                  ...d,
+                  services: d.services.map(s => s.id === id ? { ...s, images: [...s.images, dataUrl] } : s)
+              }));
+          }
+      }).catch(console.error);
+  }
+  
+  function removeServiceImage(id, indexToRemove) {
+      setData(d => ({
+          ...d,
+          services: d.services.map(s => s.id === id ? { ...s, images: s.images.filter((_, idx) => idx !== indexToRemove) } : s)
+      }));
+  }
+  
+  function addProjectImage(id, file) {
+      fileToDataURL(file).then(dataUrl => {
+          if (dataUrl) {
+              setData(d => ({
+                  ...d,
+                  projects: d.projects.map(p => p.id === id ? { ...p, images: [...p.images, dataUrl] } : p)
+              }));
+          }
+      }).catch(console.error);
+  }
+
+  function removeProjectImage(id, indexToRemove) {
+      setData(d => ({
+          ...d,
+          projects: d.projects.map(p => p.id === id ? { ...p, images: p.images.filter((_, idx) => idx !== indexToRemove) } : p)
+      }));
+  }
+
+  // VIDEO HANDLERS
+  function addVideo(file) {
+      // Basic file type check for video
+      if (!file || !file.type.startsWith('video/')) {
+          alert("Please upload a valid video file (MP4/WEBM).");
+          return;
+      }
+      fileToDataURL(file).then(dataUrl => {
+          if (dataUrl) {
+              setData(d => ({
+                  ...d,
+                  meta: { ...d.meta, backgroundVideos: [...(d.meta.backgroundVideos || []), dataUrl] }
+              }));
+          }
+      }).catch(console.error);
+  }
+
+  function removeVideo(indexToRemove) {
+      setData(d => ({
+          ...d,
+          meta: { ...d.meta, backgroundVideos: d.meta.backgroundVideos.filter((_, idx) => idx !== indexToRemove) }
+      }));
+  }
+
+
+  function setOwnerPassword(plain) {
+    const encoded = btoa(plain);
+    localStorage.setItem(OWNER_PW_KEY, encoded);
+    localStorage.setItem(OWNER_AUTH_KEY, "true");
+    setIsOwnerAuthenticated(true);
+    setShowLogin(false);
+  }
+  function verifyOwnerPassword(plain) {
+    const stored = localStorage.getItem(OWNER_PW_KEY);
+    if (!stored) return false;
+    return stored === btoa(plain);
+  }
+  function loginOwner(plain) {
+    if (!localStorage.getItem(OWNER_PW_KEY)) {
+      setOwnerPassword(plain);
+      setCurrentSection('owner'); 
+      return true;
+    }
+    if (verifyOwnerPassword(plain)) {
+      localStorage.setItem(OWNER_AUTH_KEY, "true");
+      setIsOwnerAuthenticated(true);
+      setShowLogin(false);
+      setCurrentSection('owner'); 
+      return true;
+    }
+    return false;
+  }
+  function logoutOwner() {
+    localStorage.removeItem(OWNER_AUTH_KEY);
+    setIsOwnerAuthenticated(false);
+    setCurrentSection('home'); 
+  }
+
+
+  function goSection(name){
+    setCurrentSection(name);
+    setTimeout(()=> window.scrollTo({top:0, behavior:'smooth'}), 50);
+  }
+
+  // File validation logic for contact form (No longer used as form is replaced by button)
+  const MAX_BYTES = 20 * 1024 * 1024;
+  const allowedExt = ['png','jpg','jpeg','jpeg','pdf','dwg','zip'];
+
+  function handleFileChange(e){
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    if(f.size > MAX_BYTES){
+      alert('Selected file exceeds 20 MB limit. Please choose a smaller file.');
+      e.target.value = '';
+      return;
+    }
+    const name = f.name || '';
+    const ext = name.split('.').pop().toLowerCase();
+    if(!allowedExt.includes(ext)){
+      alert('File type not allowed. Allowed: PNG, JPG, JPEG, PDF, DWG, ZIP.');
+      e.target.value = '';
+      return;
+    }
+    // valid file
+  }
+
+  function handleContactSubmit(e){
+    const input = document.getElementById('contactFileInput');
+    if(input && input.files && input.files[0]){
+      const f = input.files[0];
+      const ext = (f.name.split('.').pop() || '').toLowerCase();
+      if(f.size > MAX_BYTES){
+        e.preventDefault();
+        alert('Cannot submit: attached file exceeds 20 MB.');
+        return;
+      }
+      if(!allowedExt.includes(ext)){
+        e.preventDefault();
+        alert('Cannot submit: attached file type not allowed.');
+        return;
+      }
+    }
+    // allow submit
+  }
+
+  const emailHref = "mailto:" + 
+      data.meta.email + 
+      "?subject=" + 
+      encodeURIComponent(`Proposal Inquiry from Website (Ref: ${data.meta.company})`) + 
+      "&body=" + 
+      encodeURIComponent(`Hi ${data.meta.company} Team,\n\nI am contacting you regarding a new project. My details are below:\n\nName: \nPhone: \n\nProject brief: \n\nThank you.`);
+
+  const isOwnerSection = isOwnerAuthenticated && currentSection === 'owner';
+  
+  // The Google Form URL provided by the user
+  const googleFormUrl = "https://docs.google.com/forms/d/e/1FAIpQLSc4kVf4qBVd7gW9Bns8PE1Jpv_jwCPQX7lbQbzj8qYP7JYdUw/viewform?usp=header";
+
+
+  return (
+    <div className="min-h-screen bg-gray-50 text-slate-800">
+      <Header data={data} triggerOwnerLogin={() => setShowLogin(true)} goSection={goSection} currentSection={currentSection} isOwnerAuthenticated={isOwnerAuthenticated} />
+
+      {showLogin && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96 shadow-lg">
+            <h3 className="text-lg font-semibold mb-3">Owner Login</h3>
+            {!localStorage.getItem(OWNER_PW_KEY) ? (
+              <div>
+                <p className="text-sm text-slate-600 mb-2">No owner password set. Create one to enable Owner mode.</p>
+                <input type="password" id="setPw" placeholder="Set new password" className="w-full p-2 border rounded" />
+                <div className="mt-3 flex justify-end gap-2">
+                  <button className="px-3 py-1 border rounded" onClick={() => setShowLogin(false)}>Cancel</button>
+                  <button className="px-3 py-1 bg-indigo-700 text-white rounded" onClick={() => { const v = document.getElementById('setPw').value; if (v) setOwnerPassword(v); setCurrentSection('owner'); }}>Set password</button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm text-slate-600 mb-2">Enter owner password to access edit mode.</p>
+                <input type="password" id="loginPw" placeholder="Password" className="w-full p-2 border rounded" />
+                <div className="mt-3 flex justify-end gap-2">
+                  <button className="px-3 py-1 border rounded" onClick={() => setShowLogin(false)}>Cancel</button>
+                  <button className="px-3 py-1 bg-indigo-700 text-white rounded" onClick={() => { const v = document.getElementById('loginPw').value; const ok = loginOwner(v); if (!ok) alert('Incorrect password'); }}>Login</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* --- Home Section (Independent) --- */}
+      <section id="home" className="relative bg-gradient-to-r from-indigo-700 to-indigo-500 text-white py-40 px-6 text-center" style={{display: currentSection==='home' ? 'block' : 'none'}}>
+        
+        <VideoBackground videos={data.meta.backgroundVideos} isOwnerAuthenticated={isOwnerAuthenticated} />
+
+        <div className="max-w-4xl mx-auto relative z-20">
+          <h1 className="text-4xl font-bold mb-4">Welcome to {data.meta.company}</h1>
+          <p className="text-lg opacity-90">{data.meta.tagline}</p>
+          <div className="mt-6 flex justify-center gap-4">
+            <button onClick={()=>goSection('services')} className="bg-white text-indigo-700 px-6 py-3 rounded-md font-semibold shadow">Explore Services</button>
+            <button onClick={()=>goSection('contact')} className="border border-white px-6 py-3 rounded-md font-semibold hover:bg-white hover:text-indigo-700 transition">Get in Touch</button>
+          </div>
+        </div>
+      </section>
+
+      {/* --- NEW CENTRALIZED OWNER EDIT MODE SECTION --- */}
+      {isOwnerSection && (
+          <section id="owner" className="max-w-4xl mx-auto px-6 py-8">
+              <h2 className="text-3xl font-bold text-center mb-6 text-slate-800">Website Configuration (Edit Mode)</h2>
+              <OwnerPanel
+                  data={data}
+                  onEditService={(s) => setServiceModal(s)}
+                  onDeleteService={(id) => deleteService(id)}
+                  onEditProject={(p) => setProjectModal(p)}
+                  onDeleteProject={(id) => deleteProject(id)}
+                  onLogoUpload={handleLogoUpload}
+                  onServiceImageAdd={addServiceImage} 
+                  onServiceImageRemove={removeServiceImage} 
+                  onProjectImageAdd={addProjectImage} 
+                  onProjectImageRemove={removeProjectImage} 
+                  onAddVideo={addVideo} 
+                  onRemoveVideo={removeVideo} 
+                  onEditMeta={(k,v)=> setData(d=>({ ...d, meta: { ...d.meta, [k]: v }}))}
+                  onLogout={() => logoutOwner()}
+              />
+          </section>
+      )}
+
+      {/* --- Public Content Layout (Hidden when in Owner Section) --- */}
+      <div className="max-w-6xl mx-auto px-6 py-8 flex items-start gap-6" style={{ display: isOwnerSection ? 'none' : 'flex' }}>
+        <main className="flex-1">
+          <section id="services" className="max-w-6xl mx-auto py-8" style={{display: currentSection==='services' ? 'block' : 'none'}}>
+            <h2 className="text-3xl font-bold text-center mb-6">Our Core Services</h2>
+            {/* Services: 2 columns on medium/large screens */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6">
+              {data.services.map((s) => (
+                <div key={s.id} className="bg-white p-6 rounded-lg shadow hover:shadow-md transition relative">
+                  <ImageCarousel images={s.images} heightClass="h-32" /> 
+                  <h3 className="font-semibold text-lg mb-2 text-indigo-700">{s.title}</h3>
+                  <p className="text-slate-600 text-sm">{s.desc}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section id="projects" className="bg-gray-100 py-8 px-6 rounded-lg" style={{display: currentSection==='projects' ? 'block' : 'none'}}>
+            <div className="max-w-6xl mx-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-3xl font-bold">Featured Projects</h2>
+              </div>
+              
+              {/* Projects: 1 column on all screens */}
+              <div className="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-1 gap-6">
+                {data.projects.map((p) => (
+                  <div key={p.id} className="bg-white p-5 rounded-lg shadow-sm relative">
+                    <ImageCarousel images={p.images} heightClass="h-72" /> 
+                    <h3 className="font-semibold text-lg">{p.name}</h3>
+                    <p className="text-xs text-slate-500">{p.role}</p>
+                    <p className="text-sm text-slate-600 mt-2">{p.summary}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* --- MODIFIED CONTACT SECTION --- */}
+          <section id="contact" className="mt-8" style={{display: currentSection==='contact' ? 'block' : 'none'}}>
+            <div className="bg-white rounded-lg p-6 shadow">
+              <h3 className="text-lg font-semibold">Client Proposal Request</h3>
+              <p className="text-sm text-slate-600 mt-2">
+                For a secure and detailed proposal request, please use our **Google Form**. It allows for organized data collection and opens in a new window.
+              </p>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2">
+                  <div className="bg-gray-50 p-4 rounded-lg border border-indigo-100">
+                    <h4 className="text-lg font-medium mb-3 text-indigo-700">Open Secure Proposal Form</h4>
+                    <p className="text-sm text-slate-600 mb-4">
+                      Click the button below to fill out the form. You will be redirected to the secure Google Form page.
+                    </p>
+                    
+                    <a
+                      href={googleFormUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block px-4 py-2 bg-indigo-700 text-white rounded font-semibold hover:bg-indigo-800 transition shadow"
+                    >
+                      Go to Google Proposal Form
+                    </a>
+                    
+                    <a 
+                      href={emailHref} 
+                      className="inline-block ml-3 px-4 py-2 border rounded hover:bg-gray-100 transition"
+                    >
+                      Email Directly
+                    </a>
+                    
+                    <p className="text-xs text-slate-500 mt-3">
+                      **Go to Google Proposal Form** opens the secure form in a new window. **Email Directly** opens your email program for a less structured inquiry.
+                    </p>
+                  </div>
+                </div>
+
+                <aside className="bg-gray-50 rounded p-4">
+                  <div className="text-sm text-slate-600">Prefer to speak? Call:</div>
+                  <div className="mt-2 font-semibold">{data.meta.phone}</div>
+                  <a href={emailHref} className="text-sm text-slate-600 mt-1 block hover:text-indigo-700">{data.meta.email}</a>
+                </aside>
+              </div>
+            </div>
+          </section>
+          {/* --- END MODIFIED CONTACT SECTION --- */}
+        </main>
+
+        {/* --- Sticky Quick Contact Sidebar (Location Removed) --- */}
+        <aside className="w-80 sticky top-6">
+            <div className="bg-white rounded-lg p-4 shadow">
+                <div className="text-sm text-slate-600">Quick Contact</div>
+                <div className="mt-2 font-semibold">{data.meta.phone}</div>
+                <div className="text-sm text-slate-600 mt-1">
+                    <span className="font-semibold text-slate-700">Email:</span> {data.meta.email}
+                </div>
+                <a href={`https://wa.me/${data.meta.whatsapp.replace(/\D/g, '')}`} target="_blank" className="text-sm text-green-600 mt-1 block">
+                    WhatsApp: {data.meta.whatsapp}
+                </a>
+            </div>
+        </aside>
+      </div>
+
+      <footer className="bg-indigo-700 text-white text-center py-6">
+        <p>© {data.meta.year} {data.meta.company}. All rights reserved.</p>
+        <p className="text-sm opacity-80">{data.meta.tagline}</p>
+      </footer>
+
+      {serviceModal && (
+        <EditServiceModal
+          model={serviceModal}
+          onSave={(form) => {
+            if (serviceModal.id) updateService(serviceModal.id, form);
+            else addService(form);
+          }}
+          onClose={() => setServiceModal(null)}
+        />
+      )}
+
+      {projectModal && (
+        <EditProjectModal
+          model={projectModal}
+          onSave={(form) => {
+            if (projectModal.id) updateProject(projectModal.id, form);
+            else addProject(form);
+          }}
+          onClose={() => setProjectModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<ShivankarrInfraApp />);
+</script>
+</body>
+</html>
